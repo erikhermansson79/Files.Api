@@ -1,0 +1,25 @@
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      packages: write
+      repository-projects: read
+      contents: read
+    name: Update NuGet 
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@master
+
+      - name: Build solution and generate NuGet package
+        run: |  
+          dotnet build -c Release
+
+      - name: Publish Nuget to GitHub registry
+        run: |
+          dotnet nuget push **/*.nupkg --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate --no-symbols
