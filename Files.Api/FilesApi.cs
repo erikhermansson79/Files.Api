@@ -16,7 +16,7 @@ namespace Files.Api
 		{
 			options ??= new FilesApiOptions();
 
-			var group = routes.MapGroup("/files").WithGroupName("Files");
+			var group = routes.MapGroup("/files").WithTags("Files");
 
 			group.MapMethods("{**path}", new[] { "Get", "Head" },
 				async (string? path, [FromQuery] uint? page, [FromQuery] uint? pageSize, IFileService fileService, IHttpContextAccessor httpContextAccessor) =>
