@@ -19,7 +19,7 @@ namespace Files.Api
 			var group = routes.MapGroup("/files").WithTags("Files");
 
 			group.MapMethods("{**path}", new[] { "Get", "Head" },
-				async (string? path, [FromQuery] uint? page, [FromQuery] uint? pageSize, IFileService fileService, IHttpContextAccessor httpContextAccessor) =>
+				async (string? path, [FromQuery] uint page, [FromQuery] uint pageSize, IFileService fileService, IHttpContextAccessor httpContextAccessor) =>
 			{
 				var contentModel = await fileService.GetContentAsync(path, page, pageSize);
 
@@ -37,8 +37,7 @@ namespace Files.Api
 						: Results.File((byte[])contentModel.Data, contentModel.ContentType!),
 					_ => Results.Ok(contentModel.Data),
 				};
-			})
-			.RequireAuthorization();
+			}).RequireAuthorization();
 
 			group.MapPost("/download", async (HttpRequest request, [FromServices] IFileService fileService) =>
 			{

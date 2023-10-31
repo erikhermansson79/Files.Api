@@ -135,7 +135,7 @@ namespace Files.Api
 			dir.CreateSubdirectory(createFolderModel.FolderName);
 		}
 
-		public async Task<ContentModel> GetContentAsync(string? path = null, uint? page = 1, uint? pageSize = 20)
+		public async Task<ContentModel> GetContentAsync(string? path = null, uint page = 1, uint pageSize = 20)
 		{
 			var fullPath = !string.IsNullOrWhiteSpace(path) ? Path.Combine(_directories.LibraryDirectory, path) : path;
 			if (File.Exists(fullPath))
@@ -163,7 +163,7 @@ namespace Files.Api
 			};
 		}
 
-		private async Task<ContentModel> GetDirectoryAsync(string? path = null, uint? page = 1, uint? pageSize = 20)
+		private async Task<ContentModel> GetDirectoryAsync(string? path = null, uint page = 1, uint pageSize = 20)
 		{
 			var dir = new DirectoryInfo(
 				string.IsNullOrWhiteSpace(path)
@@ -194,7 +194,7 @@ namespace Files.Api
 
 			object? pagination = null;
 
-			if (page.HasValue && pageSize.HasValue)
+			if (page > 0 && pageSize > 0)
 			{
 				int skip = (int)((page - 1) * pageSize);
 
@@ -206,7 +206,7 @@ namespace Files.Api
 				pagination = new
 				{
 					Page = page,
-					PageTotal = (int)Math.Ceiling(allItemsCount / (pageSize.Value * 1.0)),
+					PageTotal = (int)Math.Ceiling(allItemsCount / (pageSize * 1.0)),
 				};
 			}
 
@@ -389,14 +389,16 @@ namespace Files.Api
 			}
 		}
 
-		static void CopyDirectory(string sourceDir, string destinationDir, bool recursive)
+		private static void CopyDirectory(string sourceDir, string destinationDir, bool recursive)
 		{
 			// Get information about the source directory
 			var dir = new DirectoryInfo(sourceDir);
 
 			// Check if the source directory exists
 			if (!dir.Exists)
+			{
 				throw new DirectoryNotFoundException($"Source directory not found: {dir.FullName}");
+			}
 
 			// Cache directories before we start copying
 			DirectoryInfo[] dirs = dir.GetDirectories();
