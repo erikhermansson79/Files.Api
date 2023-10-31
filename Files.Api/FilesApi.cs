@@ -19,7 +19,7 @@ namespace Files.Api
 			var group = routes.MapGroup("/files").WithTags("Files");
 
 			group.MapMethods("{**path}", new[] { "Get", "Head" },
-				async (string? path, [FromQuery] uint page, [FromQuery] uint pageSize, IFileService fileService, IHttpContextAccessor httpContextAccessor) =>
+				async (string? path, [FromQuery] uint page, [FromQuery] int pageSize, IFileService fileService, IHttpContextAccessor httpContextAccessor) =>
 			{
 				var contentModel = await fileService.GetContentAsync(path, page, pageSize);
 
@@ -48,7 +48,7 @@ namespace Files.Api
 					case 0: return Results.Problem("\"paths\" cannot be empty.", statusCode: StatusCodes.Status400BadRequest);
 					case 1 when fileService.GetType(paths[0]) == "file":
 						{
-							var contentModel = await fileService.GetContentAsync(paths[0], null, null);
+							var contentModel = await fileService.GetContentAsync(paths[0], 0, -1);
 							if (contentModel.Data == null)
 							{
 								return Results.NotFound();

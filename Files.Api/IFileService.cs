@@ -9,7 +9,7 @@ namespace Files.Api
 		//void CreateFileLinks(IEnumerable<FileLink> fileLinks);
 		void CreateFolder(CreateFolderModel createFolderModel);
 		void DeleteItem(DeleteItemModel deleteItemModel);
-		Task<ContentModel> GetContentAsync(string? path = null, uint page = 1, uint pageSize = 20);
+		Task<ContentModel> GetContentAsync(string? path = null, uint page = 1, int pageSize = 20);
 		Task<IEnumerable<PathAndStreamFactory>> GetPathsAndStreamFactoriesAsync(IEnumerable<string> paths);
 		string GetType(string v);
 		void MoveItem(MoveItemModel moveItemModel);

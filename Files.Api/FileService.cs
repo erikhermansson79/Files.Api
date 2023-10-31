@@ -135,7 +135,7 @@ namespace Files.Api
 			dir.CreateSubdirectory(createFolderModel.FolderName);
 		}
 
-		public async Task<ContentModel> GetContentAsync(string? path = null, uint page = 1, uint pageSize = 20)
+		public async Task<ContentModel> GetContentAsync(string? path = null, uint page = 1, int pageSize = 20)
 		{
 			var fullPath = !string.IsNullOrWhiteSpace(path) ? Path.Combine(_directories.LibraryDirectory, path) : path;
 			if (File.Exists(fullPath))
@@ -163,7 +163,7 @@ namespace Files.Api
 			};
 		}
 
-		private async Task<ContentModel> GetDirectoryAsync(string? path = null, uint page = 1, uint pageSize = 20)
+		private async Task<ContentModel> GetDirectoryAsync(string? path = null, uint page = 1, int pageSize = 20)
 		{
 			var dir = new DirectoryInfo(
 				string.IsNullOrWhiteSpace(path)
@@ -200,7 +200,7 @@ namespace Files.Api
 
 				allItems = allItems
 					.Skip(skip)
-					.Take((int)pageSize)
+					.Take(pageSize)
 					.ToArray();
 
 				pagination = new
