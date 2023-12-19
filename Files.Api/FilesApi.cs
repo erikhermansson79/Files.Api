@@ -12,16 +12,18 @@ namespace Files.Api
 {
 	public static class FilesApi
 	{
+		private static readonly string[] s_httpMethods = ["Get", "Head"];
+
 		public static RouteGroupBuilder MapFiles(this IEndpointRouteBuilder routes, FilesApiOptions? options = null)
 		{
 			options ??= new FilesApiOptions();
 
 			var group = routes.MapGroup("/files").WithTags("Files");
 
-			group.MapMethods("{**path}", new[] { "Get", "Head" },
-				async (string? path, [FromQuery] uint page, [FromQuery] int pageSize, IFileService fileService, IHttpContextAccessor httpContextAccessor) =>
+			group.MapMethods("{**path}", s_httpMethods,
+				async (string? path, [FromQuery] uint? page, [FromQuery] int? pageSize, IFileService fileService, IHttpContextAccessor httpContextAccessor) =>
 			{
-				var contentModel = await fileService.GetContentAsync(path, page, pageSize);
+				var contentModel = await fileService.GetContentAsync(path, page ?? 1, pageSize ?? 20);
 
 				if (contentModel.Data == null)
 				{
