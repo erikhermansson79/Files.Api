@@ -238,7 +238,7 @@ namespace Files.Api
 				})
 				.ToArray();
 
-			var breadcrumbs = new List<string> { "Library" };
+			var breadcrumbs = new List<string> { "files" };
 
 			foreach (var element in path?.Split('/', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>())
 			{
