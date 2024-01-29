@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 using System.IO.Compression;
 
@@ -14,9 +16,9 @@ namespace Files.Api
 	{
 		private static readonly string[] s_httpMethods = ["Get", "Head"];
 
-		public static RouteGroupBuilder MapFiles(this IEndpointRouteBuilder routes, FilesApiOptions? options = null)
+		public static RouteGroupBuilder MapFiles(this IEndpointRouteBuilder routes)
 		{
-			options ??= new FilesApiOptions();
+			var options = routes.ServiceProvider.GetRequiredService<IOptions<FilesApiOptions>>();
 
 			var group = routes.MapGroup("/files").WithTags("Files");
 
@@ -86,37 +88,37 @@ namespace Files.Api
 			{
 				fileService.CreateFolder(createFolderModel);
 			})
-			.RequireAuthorization(options.AdminPolicyName);
+			.RequireAuthorization(options.Value.AdminPolicyName);
 
 			group.MapPost("/ChangeItemName", ([FromBody] ChangeItemNameModel changeItemNameModel, IFileService fileService) =>
 			{
 				fileService.ChangeItemName(changeItemNameModel);
 			})
-			.RequireAuthorization(options.AdminPolicyName);
+			.RequireAuthorization(options.Value.AdminPolicyName);
 
 			group.MapPost("/DeleteItem", ([FromBody] DeleteItemModel deleteItemModel, IFileService fileService) =>
 			{
 				fileService.DeleteItem(deleteItemModel);
 			})
-			.RequireAuthorization(options.AdminPolicyName);
+			.RequireAuthorization(options.Value.AdminPolicyName);
 
 			group.MapPost("/MoveItem", ([FromBody] MoveItemModel moveItemModel, IFileService fileService) =>
 			{
 				fileService.MoveItem(moveItemModel);
 			})
-			.RequireAuthorization(options.AdminPolicyName);
+			.RequireAuthorization(options.Value.AdminPolicyName);
 
 			group.MapPost("/CopyItem", ([FromBody] CopyItemModel copyItemModel, IFileService fileService) =>
 			{
 				fileService.CopyItem(copyItemModel);
 			})
-			.RequireAuthorization(options.AdminPolicyName);
+			.RequireAuthorization(options.Value.AdminPolicyName);
 
 			group.MapPost("/ToggleItemHidden", ([FromBody] ToggleItemHiddenModel toggleItemHiddenModel, IFileService fileService) =>
 			{
 				fileService.ToggleItemHidden(toggleItemHiddenModel);
 			})
-			.RequireAuthorization(options.AdminPolicyName);
+			.RequireAuthorization(options.Value.AdminPolicyName);
 
 			group.MapPost("/UploadFileChunk", async ([FromBody] UploadFileModel uploadFileModel, IFileService fileService) =>
 			{
@@ -131,7 +133,7 @@ namespace Files.Api
 					return Results.Content(ex.Message, statusCode: StatusCodes.Status500InternalServerError);
 				}
 			})
-			.RequireAuthorization(options.AdminPolicyName);
+			.RequireAuthorization(options.Value.AdminPolicyName);
 
 			return group;
 		}

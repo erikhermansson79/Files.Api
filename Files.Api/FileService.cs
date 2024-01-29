@@ -3,6 +3,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.StaticFiles;
+using Microsoft.Extensions.Options;
 
 namespace Files.Api
 {
@@ -11,15 +12,18 @@ namespace Files.Api
 		private readonly IDirectories _directories;
 		private readonly IAuthorizationService _authorizationService;
 		private readonly IHttpContextAccessor _httpContextAccessor;
+		private readonly IOptions<FilesApiOptions> _options;
 
 		public FileService(
 			IDirectories directories,
 			IAuthorizationService authorizationService,
-			IHttpContextAccessor httpContextAccessor)
+			IHttpContextAccessor httpContextAccessor,
+			IOptions<FilesApiOptions> options)
 		{
 			_directories = directories;
 			_authorizationService = authorizationService;
 			_httpContextAccessor = httpContextAccessor;
+			_options = options;
 		}
 
 		//[LibraryImport("kernel32.dll", EntryPoint = "CreateHardLinkW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
@@ -177,7 +181,7 @@ namespace Files.Api
 
 			var isAdminCheck = await _authorizationService.AuthorizeAsync(
 				_httpContextAccessor.HttpContext!.User,
-				"Admin");
+				_options.Value.AdminPolicyName);
 
 			var attributesToSkip = FileAttributes.System;
 			if (!isAdminCheck.Succeeded)
@@ -270,7 +274,7 @@ namespace Files.Api
 		{
 			var isAdminCheck = await _authorizationService.AuthorizeAsync(
 				_httpContextAccessor.HttpContext!.User,
-				"Admin");
+				_options.Value.AdminPolicyName);
 
 			var attributesToSkip = FileAttributes.System;
 			if (!isAdminCheck.Succeeded)
