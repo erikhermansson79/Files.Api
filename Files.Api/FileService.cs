@@ -99,13 +99,18 @@ namespace Files.Api
             }
             else if (changeItemNameModel.Type == "link")
             {
-                using var fs = new FileStream(path, FileMode.Open, FileAccess.ReadWrite);
-                var fileLinkModel = JsonSerializer.Deserialize<LinkFileModel>(fs, _linkFileJsonOptions);
+                LinkFileModel? fileLinkModel = null;
+                using (var reader = new FileStream(path, FileMode.Open, FileAccess.Read))
+                {
+                    fileLinkModel = JsonSerializer.Deserialize<LinkFileModel>(reader, _linkFileJsonOptions);
+                }
+
                 if (fileLinkModel != null)
                 {
                     fileLinkModel.DisplayName = changeItemNameModel.Name;
-                    fs.Position = 0;
-                    JsonSerializer.Serialize(fs, fileLinkModel, _linkFileJsonOptions);
+
+                    using var writer = new FileStream(path, FileMode.Truncate, FileAccess.Write);
+                    JsonSerializer.Serialize(writer, fileLinkModel, _linkFileJsonOptions);
                 }
             }
         }
