@@ -97,6 +97,16 @@ namespace Files.Api
                     file.MoveTo(newPath);
                 }
             }
+            else if (changeItemNameModel.Type == "link")
+            {
+                using var fs = new FileStream(path, FileMode.Open, FileAccess.ReadWrite);
+                var fileLinkModel = JsonSerializer.Deserialize<LinkFileModel>(fs, _linkFileJsonOptions);
+                if (fileLinkModel != null)
+                {
+                    fileLinkModel.DisplayName = changeItemNameModel.Name;
+                    JsonSerializer.Serialize(fs, fileLinkModel, _linkFileJsonOptions);
+                }
+            }
         }
 
         public void ToggleItemHidden(ToggleItemHiddenModel toggleItemHiddenModel)
@@ -107,7 +117,7 @@ namespace Files.Api
                 var di = new DirectoryInfo(target);
                 di.Attributes = di.Attributes ^ FileAttributes.Hidden;
             }
-            else if (toggleItemHiddenModel.Type == "file")
+            else if (toggleItemHiddenModel.Type is "file" or "link")
             {
                 File.SetAttributes(target, File.GetAttributes(target) ^ FileAttributes.Hidden);
             }
@@ -125,7 +135,7 @@ namespace Files.Api
                     dir.Delete(recursive: true);
                 }
             }
-            else if (deleteItemModel.Type == "file")
+            else if (deleteItemModel.Type is "file" or "link")
             {
                 var file = new FileInfo(target);
                 if (file.Exists)
@@ -467,7 +477,7 @@ namespace Files.Api
                     dir.MoveTo(destination);
                 }
             }
-            else if (moveItemModel.Type == "file")
+            else if (moveItemModel.Type is "file" or "link")
             {
                 var file = new FileInfo(target);
                 var destination = Path.Combine(destinationFolder, file.Name);
@@ -529,7 +539,7 @@ namespace Files.Api
                     CopyDirectory(target, destination, true);
                 }
             }
-            else if (copyItemModel.Type == "file")
+            else if (copyItemModel.Type is "file" or "link")
             {
                 var file = new FileInfo(target);
                 var destination = Path.Combine(destinationFolder, file.Name);
