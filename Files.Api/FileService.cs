@@ -104,6 +104,7 @@ namespace Files.Api
                 if (fileLinkModel != null)
                 {
                     fileLinkModel.DisplayName = changeItemNameModel.Name;
+                    fs.Position = 0;
                     JsonSerializer.Serialize(fs, fileLinkModel, _linkFileJsonOptions);
                 }
             }

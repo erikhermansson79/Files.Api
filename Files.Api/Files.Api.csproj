@@ -5,7 +5,7 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-		<VersionPrefix>1.0.7</VersionPrefix>
+		<VersionPrefix>1.0.8</VersionPrefix>
 		<!--<VersionSuffix>preview-$([System.DateTime]::UtcNow.Year.ToString()).$([System.DateTime]::UtcNow.DayOfYear.ToString()).$([System.DateTime]::UtcNow.Hour.ToString()).$([System.DateTime]::UtcNow.Minute.ToString())</VersionSuffix>-->
 	</PropertyGroup>
 
