@@ -16,6 +16,7 @@ public static class FilesServiceCollectionExtensions
 
 		services.AddScoped<IFileService, FileService>();
 		services.AddSingleton<IDirectories, Directories>();
+		services.AddSingleton<IThumbnailService, ShellThumbnailService>();
 
 		return services;
 	}

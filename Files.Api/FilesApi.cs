@@ -9,6 +9,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 using System.IO.Compression;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Files.Api
 {
@@ -23,9 +25,55 @@ namespace Files.Api
             var group = routes.MapGroup("/files").WithTags("Files");
 
             group.MapMethods("{**path}", s_httpMethods,
-                async (string? path, [FromQuery] uint? page, [FromQuery] int? pageSize, IFileService fileService, IHttpContextAccessor httpContextAccessor) =>
+                async (string? path, [FromQuery] uint? page, [FromQuery] int? pageSize, [FromQuery] bool? thumbnails, [FromQuery] int? thumbnailSize, IFileService fileService, IDirectories directories, IThumbnailService thumbnailService, IHttpContextAccessor httpContextAccessor) =>
             {
                 var contentModel = await fileService.GetContentAsync(path, page ?? 1, pageSize ?? 20);
+
+                if (thumbnails == true && contentModel.Type == "directory" && contentModel.Data != null)
+                {
+                    try
+                    {
+                        var dataNode = JsonSerializer.SerializeToNode(contentModel.Data);
+                        if (dataNode != null && dataNode["Items"] is JsonArray itemsArray)
+                        {
+                            var semaphore = new System.Threading.SemaphoreSlim(4);
+                            var tasks = itemsArray.Select(async itemNode =>
+                            {
+                                await semaphore.WaitAsync();
+                                try
+                                {
+                                    var type = itemNode?["Type"]?.GetValue<string>();
+                                    if (type == "file")
+                                    {
+                                        var relPath = itemNode["Path"]?.GetValue<string>();
+                                        if (!string.IsNullOrEmpty(relPath))
+                                        {
+                                            var fullPath = Path.Combine(directories.LibraryDirectory, relPath.Replace('/', Path.DirectorySeparatorChar));
+                                            var thumb = await thumbnailService.GetThumbnailDataUriAsync(fullPath, thumbnailSize ?? 128);
+                                            if (thumb != null)
+                                            {
+                                                itemNode["Thumbnail"] = thumb;
+                                            }
+                                        }
+                                    }
+                                    else if (type == "link")
+                                    {
+                                        var iconData = itemNode["IconData"]?.GetValue<string>();
+                                        if (!string.IsNullOrEmpty(iconData))
+                                        {
+                                            itemNode["Thumbnail"] = $"data:image/png;base64,{iconData}";
+                                        }
+                                    }
+                                }
+                                finally { semaphore.Release(); }
+                            }).ToArray();
+
+                            await Task.WhenAll(tasks);
+                            contentModel.Data = dataNode;
+                        }
+                    }
+                    catch { }
+                }
 
                 if (contentModel.Data == null)
                 {
