@@ -1,4 +1,4 @@
-﻿using Files.Api.Models;
+using Files.Api.Models;
 
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -9,8 +9,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 using System.IO.Compression;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 
 namespace Files.Api
 {
@@ -18,62 +16,16 @@ namespace Files.Api
     {
         private static readonly string[] s_httpMethods = ["Get", "Head"];
 
-        public static RouteGroupBuilder MapFiles(this IEndpointRouteBuilder routes)
+        public static RouteGroupBuilder MapFiles(this IEndpointRouteBuilder routes, bool requireAuthorization = true)
         {
             var options = routes.ServiceProvider.GetRequiredService<IOptions<FilesApiOptions>>();
 
             var group = routes.MapGroup("/files").WithTags("Files");
 
-            group.MapMethods("{**path}", s_httpMethods,
-                async (string? path, [FromQuery] uint? page, [FromQuery] int? pageSize, [FromQuery] bool? thumbnails, [FromQuery] int? thumbnailSize, IFileService fileService, IDirectories directories, IThumbnailService thumbnailService, IHttpContextAccessor httpContextAccessor) =>
+            var catchAllHandler = group.MapMethods("{**path}", s_httpMethods,
+                async (string? path, [FromQuery] uint? page, [FromQuery] int? pageSize, IFileService fileService, IHttpContextAccessor httpContextAccessor) =>
             {
                 var contentModel = await fileService.GetContentAsync(path, page ?? 1, pageSize ?? 20);
-
-                if (thumbnails == true && contentModel.Type == "directory" && contentModel.Data != null)
-                {
-                    try
-                    {
-                        var dataNode = JsonSerializer.SerializeToNode(contentModel.Data);
-                        if (dataNode != null && dataNode["Items"] is JsonArray itemsArray)
-                        {
-                            var semaphore = new System.Threading.SemaphoreSlim(4);
-                            var tasks = itemsArray.Select(async itemNode =>
-                            {
-                                await semaphore.WaitAsync();
-                                try
-                                {
-                                    var type = itemNode?["Type"]?.GetValue<string>();
-                                    if (type == "file")
-                                    {
-                                        var relPath = itemNode["Path"]?.GetValue<string>();
-                                        if (!string.IsNullOrEmpty(relPath))
-                                        {
-                                            var fullPath = Path.Combine(directories.LibraryDirectory, relPath.Replace('/', Path.DirectorySeparatorChar));
-                                            var thumb = await thumbnailService.GetThumbnailDataUriAsync(fullPath, thumbnailSize ?? 128);
-                                            if (thumb != null)
-                                            {
-                                                itemNode["Thumbnail"] = thumb;
-                                            }
-                                        }
-                                    }
-                                    else if (type == "link")
-                                    {
-                                        var iconData = itemNode["IconData"]?.GetValue<string>();
-                                        if (!string.IsNullOrEmpty(iconData))
-                                        {
-                                            itemNode["Thumbnail"] = $"data:image/png;base64,{iconData}";
-                                        }
-                                    }
-                                }
-                                finally { semaphore.Release(); }
-                            }).ToArray();
-
-                            await Task.WhenAll(tasks);
-                            contentModel.Data = dataNode;
-                        }
-                    }
-                    catch { }
-                }
 
                 if (contentModel.Data == null)
                 {
@@ -89,9 +41,9 @@ namespace Files.Api
                         : Results.File((byte[])contentModel.Data, contentModel.ContentType!),
                     _ => Results.Ok(contentModel.Data),
                 };
-            }).RequireAuthorization();
+            });
 
-            group.MapPost("/download", async (HttpRequest request, [FromServices] IFileService fileService) =>
+            var downloadHandler = group.MapPost("/download", async (HttpRequest request, [FromServices] IFileService fileService) =>
             {
                 var form = await request.ReadFormAsync();
                 var paths = form["paths"].ToArray<string>();
@@ -129,52 +81,72 @@ namespace Files.Api
                             }
                         }, "application/zip", $"Download-{DateTime.Now:yyyy-MM-dd-HH-mm-ss}.zip");
                 }
-            })
-            .RequireAuthorization();
+            });
 
-            group.MapPost("/CreateFolder", ([FromBody] CreateFolderModel createFolderModel, IFileService fileService) =>
+            var thumbnailHandler = group.MapGet("/Thumbnail/{**path}", async (string? path, [FromQuery] int? size, IThumbnailService thumbnailService, IDirectories directories) =>
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    return Results.Problem("\"path\" cannot be empty.", statusCode: StatusCodes.Status400BadRequest);
+                }
+
+                var rel = path.TrimStart('/');
+                try
+                {
+                    // URL-decode percent-encoded characters (e.g. %20 -> space)
+                    rel = Uri.UnescapeDataString(rel);
+                }
+                catch { }
+
+                var fullPath = string.IsNullOrWhiteSpace(rel)
+                    ? directories.LibraryDirectory
+                    : Path.Combine(directories.LibraryDirectory, rel.Replace('/', Path.DirectorySeparatorChar));
+
+                var thumb = await thumbnailService.GetThumbnailDataUriAsync(fullPath, size ?? 128);
+                if (thumb == null)
+                {
+                    return Results.NotFound();
+                }
+
+                return Results.Ok(new { Path = path, Thumbnail = thumb });
+            });
+
+            var createFolderHandler = group.MapPost("/CreateFolder", ([FromBody] CreateFolderModel createFolderModel, IFileService fileService) =>
             {
                 fileService.CreateFolder(createFolderModel);
-            })
-            .RequireAuthorization(options.Value.AdminPolicyName);
+            });
 
-            group.MapPost("/CreateURL", async ([FromBody] CreateURLModel createURLModel, IFileService fileService) =>
+            var createUrlHandler = group.MapPost("/CreateURL", async ([FromBody] CreateURLModel createURLModel, IFileService fileService) =>
             {
                 await fileService.CreateURLAsync(createURLModel);
-            })
-            .RequireAuthorization(options.Value.AdminPolicyName);
+            });
 
-            group.MapPost("/ChangeItemName", ([FromBody] ChangeItemNameModel changeItemNameModel, IFileService fileService) =>
+            var changeItemNameHandler = group.MapPost("/ChangeItemName", ([FromBody] ChangeItemNameModel changeItemNameModel, IFileService fileService) =>
             {
                 fileService.ChangeItemName(changeItemNameModel);
-            })
-            .RequireAuthorization(options.Value.AdminPolicyName);
+            });
 
-            group.MapPost("/DeleteItem", ([FromBody] DeleteItemModel deleteItemModel, IFileService fileService) =>
+            var deleteItemHandler = group.MapPost("/DeleteItem", ([FromBody] DeleteItemModel deleteItemModel, IFileService fileService) =>
             {
                 fileService.DeleteItem(deleteItemModel);
-            })
-            .RequireAuthorization(options.Value.AdminPolicyName);
+            });
 
-            group.MapPost("/MoveItem", ([FromBody] MoveItemModel moveItemModel, IFileService fileService) =>
+            var moveItemHandler = group.MapPost("/MoveItem", ([FromBody] MoveItemModel moveItemModel, IFileService fileService) =>
             {
                 fileService.MoveItem(moveItemModel);
-            })
-            .RequireAuthorization(options.Value.AdminPolicyName);
+            });
 
-            group.MapPost("/CopyItem", ([FromBody] CopyItemModel copyItemModel, IFileService fileService) =>
+            var copyItemHandler = group.MapPost("/CopyItem", ([FromBody] CopyItemModel copyItemModel, IFileService fileService) =>
             {
                 fileService.CopyItem(copyItemModel);
-            })
-            .RequireAuthorization(options.Value.AdminPolicyName);
+            });
 
-            group.MapPost("/ToggleItemHidden", ([FromBody] ToggleItemHiddenModel toggleItemHiddenModel, IFileService fileService) =>
+            var toggleItemHiddenHandler = group.MapPost("/ToggleItemHidden", ([FromBody] ToggleItemHiddenModel toggleItemHiddenModel, IFileService fileService) =>
             {
                 fileService.ToggleItemHidden(toggleItemHiddenModel);
-            })
-            .RequireAuthorization(options.Value.AdminPolicyName);
+            });
 
-            group.MapPost("/UploadFileChunk", async ([FromBody] UploadFileModel uploadFileModel, IFileService fileService) =>
+            var uploadFileChunkHandler = group.MapPost("/UploadFileChunk", async ([FromBody] UploadFileModel uploadFileModel, IFileService fileService) =>
             {
                 try
                 {
@@ -186,8 +158,22 @@ namespace Files.Api
                 {
                     return Results.Content(ex.Message, statusCode: StatusCodes.Status500InternalServerError);
                 }
-            })
-            .RequireAuthorization(options.Value.AdminPolicyName);
+            });
+
+            if (requireAuthorization)
+            {
+                catchAllHandler.RequireAuthorization();
+                downloadHandler.RequireAuthorization();
+                thumbnailHandler.RequireAuthorization();
+                createFolderHandler.RequireAuthorization(options.Value.AdminPolicyName);
+                createUrlHandler.RequireAuthorization(options.Value.AdminPolicyName);
+                changeItemNameHandler.RequireAuthorization(options.Value.AdminPolicyName);
+                deleteItemHandler.RequireAuthorization(options.Value.AdminPolicyName);
+                moveItemHandler.RequireAuthorization(options.Value.AdminPolicyName);
+                copyItemHandler.RequireAuthorization(options.Value.AdminPolicyName);
+                toggleItemHiddenHandler.RequireAuthorization(options.Value.AdminPolicyName);
+                uploadFileChunkHandler.RequireAuthorization(options.Value.AdminPolicyName);
+            }
 
             return group;
         }

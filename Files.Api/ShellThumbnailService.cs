@@ -1,13 +1,10 @@
-﻿using System;
+using Microsoft.Extensions.Logging;
+
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
-using System.IO;
 using System.Runtime.InteropServices;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
 
 namespace Files.Api
 {
@@ -28,7 +25,10 @@ namespace Files.Api
 
         public async Task<string?> GetThumbnailDataUriAsync(string path, int size = 128)
         {
-            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return null;
+            }
 
             try
             {
@@ -107,8 +107,15 @@ namespace Files.Api
             return null;
         }
 
-        private static bool IsImageExt(string ext) => ext is ".jpg" or ".jpeg" or ".png" or ".gif" or ".bmp" or ".webp" or ".tiff";
-        private static bool IsVideoExt(string ext) => ext is ".mp4" or ".mov" or ".avi" or ".mkv" or ".webm";
+        private static bool IsImageExt(string ext)
+        {
+            return ext is ".jpg" or ".jpeg" or ".png" or ".gif" or ".bmp" or ".webp" or ".tiff";
+        }
+
+        private static bool IsVideoExt(string ext)
+        {
+            return ext is ".mp4" or ".mov" or ".avi" or ".mkv" or ".webm";
+        }
 
         private static bool CheckFfmpegAvailable()
         {
@@ -116,7 +123,11 @@ namespace Files.Api
             {
                 var psi = new ProcessStartInfo("ffmpeg", "-version") { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true };
                 using var p = Process.Start(psi);
-                if (p == null) return false;
+                if (p == null)
+                {
+                    return false;
+                }
+
                 p.WaitForExit(1000);
                 return p.ExitCode == 0;
             }
@@ -139,7 +150,11 @@ namespace Files.Api
                     CreateNoWindow = true,
                 };
                 using var proc = Process.Start(psi);
-                if (proc == null) return null;
+                if (proc == null)
+                {
+                    return null;
+                }
+
                 using var ms = new MemoryStream();
                 await proc.StandardOutput.BaseStream.CopyToAsync(ms);
                 await proc.WaitForExitAsync();
@@ -149,6 +164,7 @@ namespace Files.Api
                     _logger.LogDebug("ffmpeg failed for {Path}: {Err}", path, err);
                     return null;
                 }
+
                 var base64 = Convert.ToBase64String(ms.ToArray());
                 return $"data:image/png;base64,{base64}";
             }
@@ -182,8 +198,8 @@ namespace Files.Api
             void GetImage(SIZE size, SIIGBF flags, out IntPtr phbm);
         }
 
-        [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
-        private static extern void SHCreateItemFromParsingName([MarshalAs(UnmanagedType.LPWStr)] string pszPath, IntPtr pbc, [MarshalAs(UnmanagedType.IUnknown)] out object ppv);
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
+        private static extern int SHCreateItemFromParsingName([MarshalAs(UnmanagedType.LPWStr)] string pszPath, IntPtr pbc, ref Guid riid, out IntPtr ppv);
 
         [DllImport("gdi32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -207,17 +223,72 @@ namespace Files.Api
         {
             try
             {
-                SHCreateItemFromParsingName(path, IntPtr.Zero, out var obj);
-                if (obj == null) return null;
-                var factory = obj as IShellItemImageFactory;
-                if (factory == null) { Marshal.ReleaseComObject(obj); return null; }
+                string fullPath;
+                try { fullPath = Path.GetFullPath(path); } catch { fullPath = path; }
 
+                var iid = new Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b");
+                int hr = SHCreateItemFromParsingName(fullPath, IntPtr.Zero, ref iid, out var ppv);
+                if (hr != 0 || ppv == IntPtr.Zero)
+                {
+                    // Try long-path prefix as some shell handlers expect it for very long paths
+                    if (!fullPath.StartsWith(@"\\?\") && fullPath.Length > 260)
+                    {
+                        try
+                        {
+                            var longPath = @"\\?\" + fullPath;
+                            hr = SHCreateItemFromParsingName(longPath, IntPtr.Zero, ref iid, out ppv);
+                        }
+                        catch { hr = -1; ppv = IntPtr.Zero; }
+                    }
+                }
+
+                if (hr != 0 || ppv == IntPtr.Zero)
+                {
+                    return null;
+                }
+
+                object? factoryObj = null;
                 IntPtr hBitmap = IntPtr.Zero;
                 try
                 {
+                    factoryObj = Marshal.GetObjectForIUnknown(ppv);
+                    var factory = factoryObj as IShellItemImageFactory;
+                    if (factory == null)
+                    {
+                        return null;
+                    }
+
                     var s = new SIZE { cx = size, cy = size };
-                    factory.GetImage(s, SIIGBF.RESIZETOFIT | SIIGBF.CROPTOSQUARE, out hBitmap);
-                    if (hBitmap == IntPtr.Zero) return null;
+                    bool gotThumb = false;
+                    try
+                    {
+                        // Try cache-only first to avoid triggering slow providers
+                        try
+                        {
+                            factory.GetImage(s, SIIGBF.INCACHEONLY | SIIGBF.CROPTOSQUARE, out hBitmap);
+                            if (hBitmap != IntPtr.Zero) gotThumb = true;
+                        }
+                        catch { }
+
+                        // If not cached, request generation/resizing
+                        if (!gotThumb)
+                        {
+                            try
+                            {
+                                factory.GetImage(s, SIIGBF.RESIZETOFIT | SIIGBF.CROPTOSQUARE, out hBitmap);
+                                if (hBitmap != IntPtr.Zero) gotThumb = true;
+                            }
+                            catch { }
+                        }
+
+                        if (!gotThumb) return null;
+                    }
+                    catch { return null; }
+                    if (hBitmap == IntPtr.Zero)
+                    {
+                        return null;
+                    }
+
                     using var image = Image.FromHbitmap(hBitmap);
                     using var ms = new MemoryStream();
                     image.Save(ms, ImageFormat.Png);
@@ -226,9 +297,20 @@ namespace Files.Api
                 }
                 finally
                 {
-                    if (hBitmap != IntPtr.Zero) DeleteObject(hBitmap);
-                    try { Marshal.ReleaseComObject(factory); } catch { }
-                    try { Marshal.ReleaseComObject(obj); } catch { }
+                    if (hBitmap != IntPtr.Zero)
+                    {
+                        DeleteObject(hBitmap);
+                    }
+
+                    if (factoryObj != null)
+                    {
+                        try { Marshal.ReleaseComObject(factoryObj); } catch { }
+                    }
+
+                    if (ppv != IntPtr.Zero)
+                    {
+                        Marshal.Release(ppv);
+                    }
                 }
             }
             catch (Exception ex)
@@ -240,7 +322,11 @@ namespace Files.Api
 
         private Task<string?> GetShellThumbnailDataUriAsync(string path, int size)
         {
-            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return Task.FromResult<string?>(null);
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                return Task.FromResult<string?>(null);
+            }
+
             return RunOnStaThread(() => GetShellThumbnailSync(path, size));
         }
     }

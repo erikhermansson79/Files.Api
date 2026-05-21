@@ -3,14 +3,15 @@ using Files.Api;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddAuthentication();
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy("Admin", policy =>
-    {
-        policy.RequireAuthenticatedUser();
-    });
-});
+//builder.Services.AddAuthentication();
+//builder.Services.AddAuthorization(options =>
+//{
+//    options.AddPolicy("Admin", policy =>
+//    {
+//        policy.
+//        //policy.RequireAuthenticatedUser();
+//    });
+//});
 builder.Services.AddFiles();
 builder.Services.AddHttpClient();
 
@@ -26,6 +27,6 @@ app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
 
-app.MapFiles();
+app.MapFiles(false);
 
 app.Run();
